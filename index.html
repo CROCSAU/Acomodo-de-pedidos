@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#201f29">
+<title>Acomodo de Pedidos</title>
+<style>
+  :root{
+    --bg:#f5f2ef; --card:#fff; --ink:#22202b; --muted:#8d8893;
+    --accent:#d6006c; --accent-soft:#fbe3ef;
+    --ok:#1f9d5a; --ok-soft:#e3f8ec;
+    --danger:#c8392f; --danger-soft:#fceae8;
+    --warn:#b8860b; --warn-soft:#fff6e0;
+    --border:#e9e4e0; --display-bg:#201f29; --display-text:#39e88f; --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16151c; --card:#201f29; --ink:#f0eef4; --muted:#9a95a4;
+      --accent:#ff4d97; --accent-soft:#3a2230; --ok:#4cd486; --ok-soft:#1d3a2a;
+      --danger:#ff6b5e; --danger-soft:#3a1f1c; --warn:#e8c25a; --warn-soft:#3a3320; --border:#322f3d; }
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; height:100%;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink); overscroll-behavior:none;}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .app{max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column;}
+  button{font-family:inherit;}
+  :focus-visible{outline:3px solid var(--accent); outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){*{transition:none !important;}}
+
+  /* Upload overlay */
+  .upload{position:fixed; inset:0; z-index:50; background:var(--bg); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; padding:28px; text-align:center;}
+  .upload.hidden{display:none;}
+  .up-logo{font-size:2rem; font-weight:800; letter-spacing:-0.02em; margin-bottom:6px;}
+  .up-logo .dot{color:var(--accent);}
+  .up-sub{color:var(--muted); margin-bottom:28px; line-height:1.5; max-width:300px;}
+  .dropzone{width:100%; max-width:340px; border:2px dashed var(--border); border-radius:18px;
+    padding:38px 20px; background:var(--card); cursor:pointer; transition:border-color .2s, background .2s;}
+  .dropzone.drag{border-color:var(--accent); background:var(--accent-soft);}
+  .dz-icon{font-size:2.6rem;}
+  .dz-text{font-weight:700; margin-top:10px;}
+  .dz-hint{color:var(--muted); font-size:0.85rem; margin-top:4px;}
+  .up-status{margin-top:22px; min-height:24px; font-weight:600;}
+  .up-status.err{color:var(--danger);}
+  .spinner{width:34px; height:34px; border:3px solid var(--border); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .8s linear infinite; margin:10px auto;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .reload-note{margin-top:18px; font-size:0.78rem; color:var(--muted); max-width:300px; line-height:1.5;}
+
+  /* Topbar */
+  .topbar{position:sticky; top:0; z-index:10; background:var(--card); border-bottom:1px solid var(--border); padding:11px 16px;}
+  .topbar-row{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;}
+  .brand{font-weight:800; font-size:1.02rem; letter-spacing:-0.01em;}
+  .brand .dot{color:var(--accent);}
+  .topbar-meta{font-size:0.72rem; color:var(--muted);}
+  .progress-bar{height:7px; background:var(--bg); border-radius:4px; overflow:hidden;}
+  .progress-fill{height:100%; background:var(--accent); width:0%; transition:width .25s ease;}
+  .progress-label{font-size:0.7rem; color:var(--muted); margin-top:4px; text-align:right;}
+
+  main{flex:1; padding:14px 16px 22px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* Camera */
+  .cam-wrap{position:relative; width:100%; aspect-ratio:4/3; background:#000; border-radius:var(--radius);
+    overflow:hidden; margin-bottom:10px;}
+  .cam-wrap video{width:100%; height:100%; object-fit:cover; display:block;}
+  .cam-reticle{position:absolute; inset:18% 14%; border:3px solid rgba(255,255,255,.85);
+    border-radius:12px; box-shadow:0 0 0 2000px rgba(0,0,0,.28);}
+  .cam-laser{position:absolute; left:14%; right:14%; height:2px; background:var(--accent);
+    top:50%; box-shadow:0 0 8px var(--accent); animation:laser 1.6s ease-in-out infinite;}
+  @keyframes laser{0%,100%{top:22%;}50%{top:78%;}}
+  .cam-off{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; color:#fff; text-align:center; padding:20px; gap:12px;}
+  .cam-btn{padding:12px 20px; border:none; border-radius:12px; background:var(--accent); color:#fff; font-weight:700; font-size:0.95rem;}
+  .cam-msg{font-size:0.82rem; opacity:.9; line-height:1.45; max-width:280px;}
+
+  /* Manual entry */
+  .manual{display:flex; gap:8px; margin-bottom:6px;}
+  .manual input{flex:1; font-size:1.2rem; padding:12px; border-radius:12px; border:2px solid var(--border);
+    background:var(--card); color:var(--ink); text-align:center; letter-spacing:0.18em;}
+  .manual input:focus{border-color:var(--accent);}
+  .manual button{padding:0 16px; border:none; border-radius:12px; background:var(--ink); color:var(--bg); font-weight:700;}
+  .scan-hint{font-size:0.8rem; color:var(--muted); line-height:1.45; margin:6px 2px 0;}
+
+  /* Result card */
+  .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-top:14px;}
+  .card.all-done{border-color:var(--ok); background:var(--ok-soft);}
+  .card.not-found{border-color:var(--danger); background:var(--danger-soft);}
+  .nf-title{font-weight:700; color:var(--danger); margin-bottom:6px;}
+  .card-codigo{font-size:1.8rem; font-weight:800; letter-spacing:0.05em;}
+  .card-desc{font-size:1.05rem; font-weight:600; margin-top:2px;}
+  .card-total{color:var(--muted); font-size:0.8rem; margin-top:4px;}
+  .card-rows{margin-top:12px; display:flex; flex-direction:column; gap:8px;}
+  .row{display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:10px; background:var(--bg);}
+  .row.done{background:var(--ok-soft); color:var(--muted); text-decoration:line-through;}
+  .row input[type=checkbox]{width:24px; height:24px; flex-shrink:0; accent-color:var(--accent);}
+  .row-name{flex:1; font-size:0.95rem;}
+  .row-codigo{font-size:0.76rem; color:var(--muted); min-width:3.4em;}
+  .row-qty{font-weight:800;}
+  .btn-mark-all{margin-top:12px; width:100%; padding:14px; border:none; border-radius:var(--radius);
+    background:var(--accent); color:#fff; font-size:1rem; font-weight:700;}
+  .card-done-banner{margin-top:12px; text-align:center; color:var(--ok); font-weight:800;}
+
+  /* Asociadas */
+  .asoc-card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:10px; overflow:hidden;}
+  .asoc-card.ready{border-color:var(--ok);}
+  .asoc-card summary{display:flex; justify-content:space-between; align-items:center; padding:14px 16px; cursor:pointer; font-weight:700; list-style:none;}
+  .asoc-card summary::-webkit-details-marker{display:none;}
+  .asoc-card.ready summary{background:var(--ok-soft);}
+  .asoc-progress{font-size:0.85rem; color:var(--muted);}
+  .ready .asoc-progress{color:var(--ok); font-weight:800;}
+  .asoc-items{padding:4px 12px 14px; display:flex; flex-direction:column; gap:8px;}
+
+  /* Resumen */
+  details.help{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:14px; padding:2px 14px;}
+  details.help summary{font-weight:700; padding:11px 0; cursor:pointer;}
+  details.help ol{margin:0 0 10px; padding-left:20px; font-size:0.88rem; line-height:1.6;}
+  .summary-stats{display:flex; gap:10px; margin-bottom:14px;}
+  .stat{flex:1; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:13px 8px; text-align:center;}
+  .stat-num{font-size:1.4rem; font-weight:800;}
+  .stat-label{font-size:0.66rem; color:var(--muted); margin-top:4px; line-height:1.2;}
+  .resumen-note{color:var(--muted); font-size:0.86rem; line-height:1.5; margin:0 0 14px;}
+  .btn-block{width:100%; padding:14px; border-radius:var(--radius); font-weight:700; border:1px solid var(--border); background:var(--card); color:var(--ink); margin-top:10px;}
+  .btn-block.warn{border-color:var(--accent); color:var(--accent); background:var(--accent-soft);}
+  .btn-block.danger{border-color:var(--danger); color:var(--danger); background:var(--danger-soft);}
+
+  /* Tabbar */
+  .tabbar{position:sticky; bottom:0; z-index:10; background:var(--card); border-top:1px solid var(--border); display:flex; padding-bottom:env(safe-area-inset-bottom);}
+  .tab{flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:9px 0 7px; background:none; border:none; color:var(--muted); font-size:0.68rem;}
+  .tab .icon{font-size:1.25rem;}
+  .tab.active{color:var(--accent); font-weight:700;}
+
+  /* Modal: map barcode */
+  .modal{position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.45); display:none; align-items:flex-end;}
+  .modal.open{display:flex;}
+  .sheet{width:100%; max-width:480px; margin:0 auto; background:var(--card); border-radius:18px 18px 0 0; padding:18px 16px calc(18px + env(safe-area-inset-bottom)); max-height:82vh; display:flex; flex-direction:column;}
+  .sheet h3{margin:0 0 4px; font-size:1.05rem;}
+  .sheet .bc{font-size:0.8rem; color:var(--muted); margin-bottom:10px; word-break:break-all;}
+  .sheet input.search{width:100%; padding:12px; border-radius:12px; border:2px solid var(--border); background:var(--bg); color:var(--ink); margin-bottom:10px; font-size:1rem;}
+  .pick-list{overflow-y:auto; flex:1; -webkit-overflow-scrolling:touch;}
+  .pick{display:flex; gap:10px; align-items:center; padding:12px; border-radius:10px; cursor:pointer;}
+  .pick:active{background:var(--accent-soft);}
+  .pick .c{font-weight:800; min-width:3.4em;}
+  .pick .d{flex:1; font-size:0.92rem;}
+  .sheet .cancel{margin-top:8px; width:100%; padding:12px; border:none; border-radius:12px; background:var(--bg); color:var(--muted); font-weight:700;}
+</style>
+</head>
+<body>
+
+<!-- ===== UPLOAD ===== -->
+<div class="upload" id="upload">
+  <div class="up-logo">Acomodo<span class="dot">·</span>Pedidos</div>
+  <div class="up-sub">Sube el PDF de pedidos de la semana. Yo saco solo todos los códigos y a quién va cada uno.</div>
+  <div class="dropzone" id="dropzone" role="button" tabindex="0">
+    <div class="dz-icon">📄</div>
+    <div class="dz-text">Toca para elegir el PDF</div>
+    <div class="dz-hint">o arrástralo aquí</div>
+  </div>
+  <input type="file" id="file-input" style="position:absolute; left:-9999px; width:1px; height:1px; opacity:0;">
+  <div class="up-status" id="up-status"></div>
+  <div class="reload-note" id="reload-note"></div>
+</div>
+
+<!-- ===== APP ===== -->
+<div class="app" id="app" style="display:none;">
+  <header class="topbar">
+    <div class="topbar-row">
+      <span class="brand">Acomodo<span class="dot">·</span><span id="t-distri"></span></span>
+      <span class="topbar-meta" id="t-semana"></span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-label" id="progress-label">0 / 0</div>
+  </header>
+
+  <main>
+    <!-- ESCANEAR -->
+    <section id="view-escanear" class="view active">
+      <div class="cam-wrap" id="cam-wrap">
+        <video id="video" playsinline muted></video>
+        <div class="cam-reticle" id="reticle" style="display:none;"></div>
+        <div class="cam-laser" id="laser" style="display:none;"></div>
+        <div class="cam-off" id="cam-off">
+          <button class="cam-btn" id="btn-cam">📷 Encender cámara</button>
+          <div class="cam-msg" id="cam-msg">Apunta al código de barras. Si la cámara no abre, usa el cuadro de abajo para teclear el código.</div>
+        </div>
+      </div>
+      <div class="manual">
+        <input id="manual-input" class="mono" type="tel" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="código">
+        <button id="manual-go">Buscar</button>
+      </div>
+      <p class="scan-hint">Agrupa en piso las piezas con el mismo código, escanea (o teclea) una, y te digo cómo repartir esa pila. Marca cada asociada conforme la separas.</p>
+      <div id="resultado"></div>
+    </section>
+
+    <!-- ASOCIADAS -->
+    <section id="view-asociadas" class="view"><div id="lista-asociadas"></div></section>
+
+    <!-- RESUMEN -->
+    <section id="view-resumen" class="view">
+      <details class="help">
+        <summary>Cómo se usa</summary>
+        <ol>
+          <li>Vacía las cajas y junta en el piso las piezas que tengan el mismo código de 5 dígitos.</li>
+          <li>Por cada pila, escanea o teclea su código en "Escanear". Te dice cuántas piezas son y para qué asociadas.</li>
+          <li>Reparte y marca cada casilla conforme separas. La primera vez que un código de barras no se reconozca, dime una vez qué producto es y ya nunca te lo vuelve a preguntar.</li>
+          <li>Cuando una asociada diga "✓ Listo", empácala.</li>
+        </ol>
+      </details>
+      <div id="resumen-content"></div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-view="escanear"><span class="icon">📷</span><span>Escanear</span></button>
+    <button class="tab" data-view="asociadas"><span class="icon">📦</span><span>Asociadas</span></button>
+    <button class="tab" data-view="resumen"><span class="icon">📋</span><span>Resumen</span></button>
+  </nav>
+</div>
+
+<!-- ===== MODAL: map barcode ===== -->
+<div class="modal" id="modal">
+  <div class="sheet">
+    <h3>¿Qué producto es este código de barras?</h3>
+    <div class="bc mono" id="modal-bc"></div>
+    <input class="search" id="modal-search" placeholder="Buscar por código o nombre…" autocomplete="off">
+    <div class="pick-list" id="modal-list"></div>
+    <button class="cancel" id="modal-cancel">Cancelar</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+/* ============ VERIFIED PDF EXTRACTOR (idéntico al probado en Node) ============ */
+// === extractor.js : pure function, reused in the browser verbatim ===
+// Input: pages = [ [ {x,y,s}, ... ], ... ]   (one token array per page)
+// Output: { meta, por_codigo, por_asociada }
+function buildPedido(pages) {
+  const ROW_TOL = 6;        // vertical tolerance for nearest-anchor assignment
+  const X_PROD_MAX = 460;   // ignore right-side summary box
+  const isInt = s => /^\d+$/.test(s);
+  const isPrice = s => /^\$/.test(s);
+
+  function rowsFromTokens(tokens) {
+    const toks = tokens.filter(t => t.s && String(t.s).trim().length)
+      .map(t => ({ x: t.x, y: t.y, s: String(t.s).trim() }))
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+    const rows = [];
+    let cur = null;
+    for (const t of toks) {
+      if (!cur || Math.abs(cur.y - t.y) > 3) { cur = { y: t.y, toks: [t] }; rows.push(cur); }
+      else cur.toks.push(t);
+    }
+    for (const r of rows) r.toks.sort((a, b) => a.x - b.x);
+    return rows;
+  }
+
+  function headerInfo(T) {
+    const codIdx = T.findIndex(t => t.s === 'Código' && t.x < 60);
+    const nomIdx = T.findIndex(t => t.s === 'Nombre Asociado');
+    if (codIdx === -1 || nomIdx === -1) return null;
+    let codigo = null;
+    for (let i = codIdx + 1; i < T.length; i++) if (isInt(T[i].s)) { codigo = T[i].s; break; }
+    const telIdx = T.findIndex(t => t.s === 'Teléfono Distribuidora');
+    const end = telIdx !== -1 ? telIdx : T.length;
+    const nameToks = [];
+    for (let i = nomIdx + 1; i < end; i++) nameToks.push(T[i].s);
+    const nombre = nameToks.join(' ').trim();
+    if (!codigo || !nombre) return null;
+    return { codigo, nombre };
+  }
+
+  const asociadas = new Map(); // codigo -> {nombre, codigo, items:Map(code->{descripcion,cantidad})}
+  let lastHeader = null;
+  const META = { distribuidora: '', semana: '' };
+
+  function ensure(h) {
+    if (!asociadas.has(h.codigo)) asociadas.set(h.codigo, { nombre: h.nombre, codigo: h.codigo, items: new Map() });
+    return asociadas.get(h.codigo);
+  }
+
+  for (const pageTokens of pages) {
+    const rows = rowsFromTokens(pageTokens);
+
+    // meta (distribuidora / semana) from the Semana...Distribuidora...Código row
+    for (const r of rows) {
+      const T = r.toks;
+      const sIdx = T.findIndex(t => t.s === 'Semana');
+      const dIdx = T.findIndex(t => t.s === 'Distribuidora');
+      if (sIdx !== -1 && dIdx !== -1) {
+        if (!META.semana && T[sIdx + 1]) META.semana = T[sIdx + 1].s;
+        const cIdx = T.findIndex(t => t.s === 'Código' && t.x > 600);
+        const end = cIdx !== -1 ? cIdx : T.length;
+        if (!META.distribuidora) {
+          const dt = []; for (let i = dIdx + 1; i < end; i++) dt.push(T[i].s);
+          META.distribuidora = dt.join(' ').trim();
+        }
+      }
+    }
+    // headers on this page with their y
+    const headers = [];
+    for (const r of rows) {
+      const h = headerInfo(r.toks);
+      if (h) { headers.push({ y: r.y, ...h }); ensure(h); lastHeader = h; }
+    }
+    const ownerForY = (y) => {
+      let best = null, bestDy = Infinity;
+      for (const h of headers) if (h.y >= y && (h.y - y) < bestDy) { bestDy = h.y - y; best = h; }
+      return best || lastHeader;
+    };
+
+    // product-code anchors
+    const anchors = [];
+    for (const r of rows) for (const t of r.toks)
+      if (t.x >= 15 && t.x < 45 && /^\d{4,6}$/.test(t.s)) anchors.push({ code: t.s, x: t.x, y: t.y });
+    if (!anchors.length) continue;
+
+    // nearest-anchor token assignment
+    const bucket = anchors.map(() => []);
+    for (const r of rows) for (const t of r.toks) {
+      if (t.x >= X_PROD_MAX) continue;
+      let best = -1, bestD = Infinity;
+      for (let i = 0; i < anchors.length; i++) {
+        const d = Math.abs(anchors[i].y - t.y);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      if (best !== -1 && bestD <= ROW_TOL) bucket[best].push(t);
+    }
+
+    for (let i = 0; i < anchors.length; i++) {
+      const a = anchors[i];
+      const owner = ownerForY(a.y);
+      if (!owner) continue;
+      const toks = bucket[i];
+      const desc = toks.filter(t => t.x >= 50 && t.x < 190).sort((p, q) => p.x - q.x).map(t => t.s).join(' ').trim();
+      const prices = toks.filter(t => isPrice(t.s)).sort((p, q) => p.x - q.x);
+      const firstPriceX = prices.length ? prices[0].x : Infinity;
+      const ints = toks.filter(t => t.x >= 45 && t.x < firstPriceX && isInt(t.s)).sort((p, q) => p.x - q.x);
+      const cantidad = ints.length ? parseInt(ints[ints.length - 1].s, 10) : 0;
+      const asoc = asociadas.get(owner.codigo);
+      const prev = asoc.items.get(a.code);
+      if (prev) { prev.cantidad += cantidad; if (!prev.descripcion && desc) prev.descripcion = desc; }
+      else asoc.items.set(a.code, { descripcion: desc, cantidad });
+    }
+  }
+
+  // outputs
+  const por_asociada = [];
+  const codeAgg = new Map();
+  for (const [codAsoc, a] of asociadas) {
+    const items = []; let total_piezas = 0;
+    for (const [code, it] of a.items) {
+      items.push({ codigo: code, descripcion: it.descripcion, cantidad: it.cantidad });
+      total_piezas += it.cantidad;
+      if (!codeAgg.has(code)) codeAgg.set(code, { descripcion: it.descripcion, total: 0, asociadas: [] });
+      const ca = codeAgg.get(code);
+      ca.total += it.cantidad;
+      ca.asociadas.push({ nombre: a.nombre, codigo_asociado: codAsoc, cantidad: it.cantidad });
+      if (!ca.descripcion && it.descripcion) ca.descripcion = it.descripcion;
+    }
+    por_asociada.push({ nombre: a.nombre, codigo_asociado: codAsoc, items, total_piezas });
+  }
+  const por_codigo = [];
+  for (const [code, ca] of codeAgg) por_codigo.push({ codigo: code, descripcion: ca.descripcion, total: ca.total, asociadas: ca.asociadas });
+  por_codigo.sort((x, y) => x.codigo.localeCompare(y.codigo));
+  const total_piezas = por_asociada.reduce((s, a) => s + a.total_piezas, 0);
+  return { meta: { total_piezas, total_asociadas: por_asociada.length, total_codigos: por_codigo.length, distribuidora: META.distribuidora, semana: META.semana }, por_codigo, por_asociada };
+}
+
+
+/* ============================================================================= */
+
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+/* ---------- resilient storage (localStorage on phone; memory fallback in sandboxes) ---------- */
+const mem = {};
+const store = {
+  get(k){ try { const v = localStorage.getItem(k); return v == null ? (k in mem ? mem[k] : null) : v; } catch(e){ return k in mem ? mem[k] : null; } },
+  set(k,v){ mem[k]=v; try { localStorage.setItem(k,v); } catch(e){} },
+  del(k){ delete mem[k]; try { localStorage.removeItem(k); } catch(e){} }
+};
+const K_PEDIDO='bw_pedido', K_PROG='bw_progreso', K_BC='bw_barcodes';
+
+/* ---------- state ---------- */
+let DATA=null, codeMap=new Map(), totalPares=0;
+let progreso = JSON.parse(store.get(K_PROG) || '{}');
+let barcodes = JSON.parse(store.get(K_BC) || '{}');   // raw/digits -> codigo (persiste entre semanas)
+let currentCodigo=null;
+
+const keyFor=(codigo,codAsoc)=>codigo+'|'+codAsoc;
+function saveProg(){ store.set(K_PROG, JSON.stringify(progreso)); }
+function saveBarcodes(){ store.set(K_BC, JSON.stringify(barcodes)); }
+
+/* ---------- hashing for pedido id ---------- */
+async function hashBuf(buf){
+  try{ const h=await crypto.subtle.digest('SHA-256', buf); return Array.from(new Uint8Array(h)).slice(0,8).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+  catch(e){ return String(buf.byteLength); }
+}
+
+/* ---------- load pedido into runtime ---------- */
+function loadData(d){
+  DATA=d;
+  codeMap=new Map(d.por_codigo.map(e=>[e.codigo,e]));
+  totalPares=d.por_asociada.reduce((s,a)=>s+a.items.length,0);
+  document.getElementById('t-distri').textContent=(d.meta.distribuidora||'Pedido').split(' ')[0];
+  document.getElementById('t-semana').textContent='Semana '+(d.meta.semana||'');
+  document.getElementById('upload').classList.add('hidden');
+  document.getElementById('app').style.display='flex';
+  renderAll();
+}
+
+/* ---------- PDF processing ---------- */
+async function processPDF(file){
+  const status=document.getElementById('up-status');
+  status.className='up-status'; status.textContent='Leyendo PDF…';
+  document.getElementById('reload-note').innerHTML='<div class="spinner"></div>';
+  try{
+    const buf=await file.arrayBuffer();
+    const id=await hashBuf(buf.slice(0));
+    const doc=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;
+    const pages=[];
+    for(let p=1;p<=doc.numPages;p++){
+      status.textContent=`Leyendo página ${p} de ${doc.numPages}…`;
+      const page=await doc.getPage(p);
+      const tc=await page.getTextContent();
+      pages.push(tc.items.map(it=>({x:it.transform[4], y:it.transform[5], s:it.str})));
+    }
+    const out=buildPedido(pages);
+    if(!out.por_asociada.length || !out.meta.total_piezas){
+      throw new Error('No pude leer la tabla de productos. ¿Es el PDF de pedidos de Betterware?');
+    }
+    out.meta.id=id; out.meta.archivo=file.name; out.meta.fecha=new Date().toISOString();
+
+    // new pedido? reset progress (but keep barcodes map)
+    const prevId=(JSON.parse(store.get(K_PEDIDO)||'{}').meta||{}).id;
+    if(prevId!==id){ progreso={}; saveProg(); }
+
+    store.set(K_PEDIDO, JSON.stringify(out));
+    status.className='up-status';
+    status.innerHTML=`✓ ${out.meta.total_piezas} piezas · ${out.meta.total_asociadas} asociadas · ${out.meta.total_codigos} códigos`;
+    document.getElementById('reload-note').textContent='';
+    setTimeout(()=>loadData(out), 650);
+  }catch(err){
+    status.className='up-status err';
+    status.textContent='⚠️ '+err.message;
+    document.getElementById('reload-note').textContent='Verifica que sea el PDF correcto e inténtalo de nuevo.';
+  }
+}
+
+/* ---------- upload wiring ---------- */
+const fileInput=document.getElementById('file-input');
+const dz=document.getElementById('dropzone');
+function pickFile(f){
+  if(!f) return;
+  if(/^(image|video|audio)\//.test(f.type||'')){
+    const s=document.getElementById('up-status'); s.className='up-status err';
+    s.textContent='⚠️ Eso es una imagen/video, no el PDF. Elige el archivo .pdf del pedido.'; return;
+  }
+  processPDF(f);
+}
+dz.addEventListener('click', ()=>fileInput.click());
+dz.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fileInput.click(); } });
+fileInput.addEventListener('change', e=>{ pickFile(e.target.files[0]); fileInput.value=''; });
+['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev, e=>{e.preventDefault(); dz.classList.remove('drag');}));
+dz.addEventListener('drop', e=>{ pickFile(e.dataTransfer.files[0]); });
+
+/* ---------- toggle / mark ---------- */
+function toggle(codigo,codAsoc){ const k=keyFor(codigo,codAsoc); progreso[k]=!progreso[k]; saveProg(); renderAll(); }
+function marcarTodo(codigo){
+  const e=codeMap.get(codigo); if(!e) return;
+  for(const a of e.asociadas) progreso[keyFor(codigo,a.codigo_asociado)]=true;
+  saveProg(); currentCodigo=null; document.getElementById('resultado').innerHTML='';
+  buzz(); renderAll();
+}
+function countDone(){ let d=0; for(const a of DATA.por_asociada) for(const it of a.items) if(progreso[keyFor(it.codigo,a.codigo_asociado)]) d++; return d; }
+function buzz(){ try{ if(navigator.vibrate) navigator.vibrate(35); }catch(e){} }
+
+/* ---------- lookup + render result ---------- */
+function buscar(codigo){ currentCodigo=codigo; renderResultado(); }
+function renderResultado(){
+  const el=document.getElementById('resultado');
+  if(!currentCodigo){ el.innerHTML=''; return; }
+  const e=codeMap.get(currentCodigo);
+  if(!e){
+    el.innerHTML=`<div class="card not-found"><div class="nf-title">⚠️ Código ${currentCodigo} no está en este pedido</div>
+      <p style="margin:0;font-size:0.9rem;">Puede ser de otra semana o de otra distribuidora. Apártalo y revísalo al final; no lo metas a ninguna caja.</p></div>`;
+    return;
+  }
+  const rows=e.asociadas.map(a=>{
+    const done=!!progreso[keyFor(e.codigo,a.codigo_asociado)];
+    return `<label class="row ${done?'done':''}"><input type="checkbox" ${done?'checked':''} onchange="toggle('${e.codigo}','${a.codigo_asociado}')">
+      <span class="row-name">${a.nombre}</span><span class="row-qty mono">x${a.cantidad}</span></label>`;
+  }).join('');
+  const all=e.asociadas.every(a=>progreso[keyFor(e.codigo,a.codigo_asociado)]);
+  el.innerHTML=`<div class="card ${all?'all-done':''}">
+    <div class="card-codigo mono">${e.codigo}</div><div class="card-desc">${e.descripcion||''}</div>
+    <div class="card-total">${e.total} pieza${e.total===1?'':'s'} · ${e.asociadas.length} asociada${e.asociadas.length===1?'':'s'}</div>
+    <div class="card-rows">${rows}</div>
+    ${all?'<div class="card-done-banner">✓ Pila completa</div>':`<button class="btn-mark-all" onclick="marcarTodo('${e.codigo}')">Marcar todo y siguiente</button>`}</div>`;
+}
+
+/* ---------- render asociadas / resumen / progress ---------- */
+function renderAsociadas(){
+  const el=document.getElementById('lista-asociadas');
+  const list=DATA.por_asociada.map(a=>{
+    const done=a.items.filter(it=>progreso[keyFor(it.codigo,a.codigo_asociado)]).length;
+    return {a,done,total:a.items.length,ready:done===a.items.length};
+  }).sort((x,y)=>(x.ready-y.ready));
+  el.innerHTML=list.map(({a,done,total,ready})=>{
+    const items=a.items.map(it=>{
+      const d=!!progreso[keyFor(it.codigo,a.codigo_asociado)];
+      return `<label class="row ${d?'done':''}"><input type="checkbox" ${d?'checked':''} onchange="toggle('${it.codigo}','${a.codigo_asociado}')">
+        <span class="row-codigo mono">${it.codigo}</span><span class="row-name">${it.descripcion||''}</span><span class="row-qty mono">x${it.cantidad}</span></label>`;
+    }).join('');
+    return `<details class="asoc-card ${ready?'ready':''}"><summary><span>${a.nombre}</span>
+      <span class="asoc-progress mono">${ready?'✓ Listo':done+' / '+total}</span></summary>
+      <div class="asoc-items">${items}</div></details>`;
+  }).join('');
+}
+function renderResumen(){
+  const done=countDone();
+  const ready=DATA.por_asociada.filter(a=>a.items.every(it=>progreso[keyFor(it.codigo,a.codigo_asociado)])).length;
+  document.getElementById('resumen-content').innerHTML=`
+    <div class="summary-stats">
+      <div class="stat"><div class="stat-num mono">${done}/${totalPares}</div><div class="stat-label">líneas separadas</div></div>
+      <div class="stat"><div class="stat-num mono">${ready}/${DATA.por_asociada.length}</div><div class="stat-label">asociadas listas</div></div>
+      <div class="stat"><div class="stat-num mono">${DATA.meta.total_codigos}</div><div class="stat-label">códigos</div></div>
+    </div>
+    <p class="resumen-note">${DATA.meta.total_piezas} piezas · ${DATA.por_asociada.length} asociadas · ${DATA.meta.distribuidora||''} · semana ${DATA.meta.semana||''}<br>Archivo: ${DATA.meta.archivo||''}</p>
+    <button class="btn-block" onclick="exportCSV()">⬇︎ Exportar reporte (CSV)</button>
+    <button class="btn-block warn" onclick="document.getElementById('file-input').click()">↻ Cargar PDF de otra semana</button>
+    <button class="btn-block danger" onclick="reiniciar()">Reiniciar marcado de este pedido</button>`;
+}
+function renderProgress(){
+  const done=countDone(); const pct=totalPares?Math.round(done/totalPares*100):0;
+  document.getElementById('progress-fill').style.width=pct+'%';
+  document.getElementById('progress-label').textContent=done+' / '+totalPares+' líneas';
+}
+function renderAll(){ if(!DATA) return; renderProgress(); renderResultado(); renderAsociadas(); renderResumen(); }
+
+function reiniciar(){
+  if(confirm('¿Borrar el marcado de este pedido? (No borra los códigos de barras aprendidos.)')){
+    progreso={}; saveProg(); currentCodigo=null; document.getElementById('resultado').innerHTML=''; renderAll();
+  }
+}
+function exportCSV(){
+  const rows=[['Asociada','CodigoAsociado','Codigo','Descripcion','Cantidad','Separado']];
+  for(const a of DATA.por_asociada) for(const it of a.items)
+    rows.push([a.nombre,a.codigo_asociado,it.codigo,(it.descripcion||'').replace(/"/g,'""'),it.cantidad, progreso[keyFor(it.codigo,a.codigo_asociado)]?'si':'no']);
+  const csv=rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\r\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=`acomodo_${(DATA.meta.distribuidora||'pedido').split(' ')[0]}_S${(DATA.meta.semana||'').split(' ')[0]}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+/* ---------- barcode resolution cascade ---------- */
+function resolveBarcode(raw){
+  const digits=(String(raw).match(/\d+/g)||[]).join('');
+  if(barcodes[raw]!=null && codeMap.has(barcodes[raw])) return {code:barcodes[raw]};
+  if(barcodes[digits]!=null && codeMap.has(barcodes[digits])) return {code:barcodes[digits]};
+  if(codeMap.has(String(raw))) return {code:String(raw)};
+  if(codeMap.has(digits)) return {code:digits};
+  return {code:null, raw:String(raw), digits};
+}
+let lastRaw=null, lastTime=0;
+function handleScan(raw){
+  const now=Date.now();
+  if(raw===lastRaw && now-lastTime<2500) return;   // anti-rebote
+  lastRaw=raw; lastTime=now;
+  const r=resolveBarcode(raw);
+  if(r.code){ buzz(); buscar(r.code); }
+  else openModal(r.raw, r.digits);
+}
+
+/* ---------- map-barcode modal ---------- */
+let pendingBarcode=null;
+function openModal(raw,digits){
+  pendingBarcode={raw,digits};
+  document.getElementById('modal-bc').textContent='Código de barras: '+raw;
+  document.getElementById('modal-search').value='';
+  buildPickList('');
+  document.getElementById('modal').classList.add('open');
+  scanPaused=true;
+}
+function buildPickList(q){
+  q=q.toLowerCase();
+  const items=DATA.por_codigo.filter(e=> e.codigo.includes(q) || (e.descripcion||'').toLowerCase().includes(q)).slice(0,60);
+  document.getElementById('modal-list').innerHTML=items.map(e=>
+    `<div class="pick" onclick="mapTo('${e.codigo}')"><span class="c mono">${e.codigo}</span><span class="d">${e.descripcion||''}</span></div>`).join('')
+    || '<div style="padding:14px;color:var(--muted)">Sin coincidencias</div>';
+}
+function mapTo(codigo){
+  if(pendingBarcode){
+    barcodes[pendingBarcode.raw]=codigo;
+    if(pendingBarcode.digits) barcodes[pendingBarcode.digits]=codigo;
+    saveBarcodes();
+  }
+  closeModal(); buzz(); buscar(codigo);
+}
+function closeModal(){ document.getElementById('modal').classList.remove('open'); pendingBarcode=null; scanPaused=false; lastRaw=null; }
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+document.getElementById('modal-search').addEventListener('input', e=>buildPickList(e.target.value));
+
+/* ---------- camera + scanning ---------- */
+let stream=null, scanning=false, scanPaused=false, detector=null, zxingReader=null, rafId=null;
+const video=document.getElementById('video');
+
+async function startCamera(){
+  document.getElementById('cam-msg').textContent='Abriendo cámara…';
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+    video.srcObject=stream; await video.play();
+    document.getElementById('cam-off').style.display='none';
+    document.getElementById('reticle').style.display='block';
+    document.getElementById('laser').style.display='block';
+    scanning=true; scanPaused=false;
+    if('BarcodeDetector' in window){
+      try{ detector=new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','upc_a','upc_e','itf','codabar','qr_code']}); }
+      catch(e){ detector=new BarcodeDetector(); }
+      loopNative();
+    } else {
+      await startZXing();
+    }
+  }catch(err){
+    document.getElementById('cam-off').style.display='flex';
+    const m=document.getElementById('cam-msg');
+    if(location.protocol==='file:') m.textContent='La cámara necesita que la app se abra desde una página web (https), no como archivo local. Mientras tanto, teclea el código abajo.';
+    else if(err && (err.name==='NotAllowedError'||err.name==='SecurityError')) m.textContent='No diste permiso de cámara (o el sitio no es https). Actívalo en el candado del navegador, o teclea el código abajo.';
+    else m.textContent='No se pudo abrir la cámara en este dispositivo. Usa el cuadro de abajo para teclear el código.';
+  }
+}
+function loopNative(){
+  if(!scanning) return;
+  const tick=async ()=>{
+    if(!scanning){ return; }
+    if(!scanPaused && video.readyState>=2){
+      try{ const codes=await detector.detect(video); if(codes && codes.length) handleScan(codes[0].rawValue); }catch(e){}
+    }
+    rafId=setTimeout(tick, 120);
+  };
+  tick();
+}
+async function startZXing(){
+  try{
+    if(!window.ZXing){
+      await new Promise((res,rej)=>{ const s=document.createElement('script');
+        s.src='https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+    }
+    zxingReader=new ZXing.BrowserMultiFormatReader();
+    zxingReader.decodeFromVideoElement(video,(result,err)=>{ if(result && !scanPaused) handleScan(result.getText()); });
+  }catch(e){
+    document.getElementById('cam-msg').textContent='No pude cargar el lector en este navegador. Teclea el código abajo.';
+  }
+}
+function stopCamera(){
+  scanning=false;
+  if(rafId) clearTimeout(rafId);
+  try{ if(zxingReader){ zxingReader.reset(); zxingReader=null; } }catch(e){}
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  video.srcObject=null;
+  document.getElementById('cam-off').style.display='flex';
+  document.getElementById('reticle').style.display='none';
+  document.getElementById('laser').style.display='none';
+  document.getElementById('cam-msg').textContent='Apunta al código de barras. Si la cámara no abre, teclea el código abajo.';
+}
+document.getElementById('btn-cam').addEventListener('click', startCamera);
+
+/* ---------- manual entry ---------- */
+const mi=document.getElementById('manual-input');
+function manualGo(){ const v=mi.value.replace(/\D/g,''); if(v){ buscar(v); mi.value=''; mi.blur(); } }
+document.getElementById('manual-go').addEventListener('click', manualGo);
+mi.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); manualGo(); } });
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    const v=btn.dataset.view;
+    document.getElementById('view-'+v).classList.add('active');
+    if(v!=='escanear') stopCamera();   // save battery when not scanning
+  });
+});
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) stopCamera(); });
+
+/* ---------- boot ---------- */
+(function boot(){
+  // show "reanudar" note on upload if a previous pedido exists
+  const saved=store.get(K_PEDIDO);
+  if(saved){
+    try{
+      const d=JSON.parse(saved);
+      document.getElementById('reload-note').innerHTML=
+        `Tienes cargado el pedido de <b>semana ${d.meta.semana||''}</b> (${d.meta.total_piezas} piezas).
+         <a href="#" id="resume" style="color:var(--accent);font-weight:700;">Continuar con ese</a>.`;
+      setTimeout(()=>{ const r=document.getElementById('resume'); if(r) r.addEventListener('click', e=>{ e.preventDefault(); loadData(d); }); },0);
+    }catch(e){}
+  }
+})();
+</script>
+</body>
+</html>
