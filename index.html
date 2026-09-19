@@ -67,6 +67,9 @@
   .cam-wrap{position:relative; width:100%; aspect-ratio:4/3; background:#000; border-radius:var(--radius);
     overflow:hidden; margin-bottom:10px;}
   .cam-wrap video{width:100%; height:100%; object-fit:cover; display:block;}
+  .cam-wrap video.mirror{transform:scaleX(-1);}
+  .cam-switch{position:absolute; top:10px; right:10px; z-index:6; width:44px; height:44px;
+    border:none; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; font-size:1.25rem;}
   .cam-reticle{position:absolute; inset:18% 14%; border:3px solid rgba(255,255,255,.85);
     border-radius:12px; box-shadow:0 0 0 2000px rgba(0,0,0,.28);}
   .cam-laser{position:absolute; left:14%; right:14%; height:2px; background:var(--accent);
@@ -98,6 +101,8 @@
   .row.done{background:var(--ok-soft); color:var(--muted); text-decoration:line-through;}
   .row input[type=checkbox]{width:24px; height:24px; flex-shrink:0; accent-color:var(--accent);}
   .row-name{flex:1; font-size:0.95rem;}
+  .row-num{font-weight:800; color:var(--accent); min-width:2.1em; font-size:0.9rem;}
+  .asoc-num{font-weight:800; color:var(--accent); margin-right:6px;}
   .row-codigo{font-size:0.76rem; color:var(--muted); min-width:3.4em;}
   .row-qty{font-weight:800;}
   .btn-mark-all{margin-top:12px; width:100%; padding:14px; border:none; border-radius:var(--radius);
@@ -146,12 +151,49 @@
   .pick .c{font-weight:800; min-width:3.4em;}
   .pick .d{flex:1; font-size:0.92rem;}
   .sheet .cancel{margin-top:8px; width:100%; padding:12px; border:none; border-radius:12px; background:var(--bg); color:var(--muted); font-weight:700;}
+
+  /* Auth gate */
+  .auth-tabs{display:flex; gap:8px; margin-bottom:16px; width:100%; max-width:300px;}
+  .auth-tab{flex:1; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--card); color:var(--muted); font-weight:700;}
+  .auth-tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .auth-form{width:100%; max-width:300px; display:flex; flex-direction:column; gap:10px;}
+  .auth-form input{padding:13px; border-radius:12px; border:2px solid var(--border); background:var(--card); color:var(--ink); font-size:1rem;}
+  .auth-form input:focus{border-color:var(--accent);}
+  .pago-pendiente{display:flex; flex-direction:column; align-items:center; gap:6px; max-width:300px;}
+  .topbar-right{display:flex; align-items:center; gap:10px;}
+  .topbar-logout{background:none; border:none; color:var(--muted); font-size:1.15rem; padding:2px 4px; line-height:1;}
 </style>
 </head>
 <body>
 
+<!-- ===== AUTH GATE (login / crear cuenta / pago pendiente) ===== -->
+<div class="upload" id="auth-gate">
+  <div class="up-logo">Acomodo<span class="dot">·</span>Pedidos</div>
+  <div class="up-sub">Inicia sesión para usar la app.</div>
+
+  <div class="auth-tabs" id="auth-tabs">
+    <button class="auth-tab active" type="button" data-mode="login">Entrar</button>
+    <button class="auth-tab" type="button" data-mode="signup">Crear cuenta</button>
+  </div>
+
+  <form class="auth-form" id="auth-form">
+    <input type="email" id="auth-email" placeholder="correo" autocomplete="email" required>
+    <input type="password" id="auth-password" placeholder="contraseña (mínimo 6 letras)" autocomplete="current-password" minlength="6" required>
+    <button type="submit" class="cam-btn" id="auth-submit">Entrar</button>
+  </form>
+
+  <div class="up-status" id="auth-status"></div>
+
+  <div class="pago-pendiente" id="pago-pendiente" style="display:none;">
+    <div class="dz-icon">⏳</div>
+    <div class="dz-text">Tu cuenta aún no está activa</div>
+    <div class="dz-hint">Confirma tu pago con el administrador para que te activen el acceso.</div>
+    <button class="btn-block" id="btn-logout-pending" style="max-width:300px; margin-top:10px;">Cerrar sesión</button>
+  </div>
+</div>
+
 <!-- ===== UPLOAD ===== -->
-<div class="upload" id="upload">
+<div class="upload hidden" id="upload">
   <div class="up-logo">Acomodo<span class="dot">·</span>Pedidos</div>
   <div class="up-sub">Sube el PDF de pedidos de la semana. Yo saco solo todos los códigos y a quién va cada uno.</div>
   <div class="dropzone" id="dropzone" role="button" tabindex="0">
@@ -169,7 +211,10 @@
   <header class="topbar">
     <div class="topbar-row">
       <span class="brand">Acomodo<span class="dot">·</span><span id="t-distri"></span></span>
-      <span class="topbar-meta" id="t-semana"></span>
+      <span class="topbar-right">
+        <span class="topbar-meta" id="t-semana"></span>
+        <button class="topbar-logout" id="btn-logout-app" title="Cerrar sesión" aria-label="Cerrar sesión">⏻</button>
+      </span>
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     <div class="progress-label" id="progress-label">0 / 0</div>
@@ -182,6 +227,7 @@
         <video id="video" playsinline muted></video>
         <div class="cam-reticle" id="reticle" style="display:none;"></div>
         <div class="cam-laser" id="laser" style="display:none;"></div>
+        <button class="cam-switch" id="btn-switch-cam" style="display:none;" title="Cambiar de cámara" aria-label="Cambiar de cámara">🔄</button>
         <div class="cam-off" id="cam-off">
           <button class="cam-btn" id="btn-cam">📷 Encender cámara</button>
           <div class="cam-msg" id="cam-msg">Apunta al código de barras. Si la cámara no abre, usa el cuadro de abajo para teclear el código.</div>
@@ -232,9 +278,12 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* ============ VERIFIED PDF EXTRACTOR (idéntico al probado en Node) ============ */
 // === extractor.js : pure function, reused in the browser verbatim ===
+// Input: pages = [ [ {x,y,s}, ... ], ... ]   (one token array per page)
+// Output: { meta, por_codigo, por_asociada }
 // Input: pages = [ [ {x,y,s}, ... ], ... ]   (one token array per page)
 // Output: { meta, por_codigo, por_asociada }
 function buildPedido(pages) {
@@ -346,10 +395,13 @@ function buildPedido(pages) {
     }
   }
 
-  // outputs
+  // outputs — numero = orden fijo de aparición en el PDF, nunca cambia después
   const por_asociada = [];
   const codeAgg = new Map();
+  const numeroPorAsoc = new Map();
+  { let idx = 0; for (const codAsoc of asociadas.keys()) numeroPorAsoc.set(codAsoc, ++idx); }
   for (const [codAsoc, a] of asociadas) {
+    const numero = numeroPorAsoc.get(codAsoc);
     const items = []; let total_piezas = 0;
     for (const [code, it] of a.items) {
       items.push({ codigo: code, descripcion: it.descripcion, cantidad: it.cantidad });
@@ -357,10 +409,10 @@ function buildPedido(pages) {
       if (!codeAgg.has(code)) codeAgg.set(code, { descripcion: it.descripcion, total: 0, asociadas: [] });
       const ca = codeAgg.get(code);
       ca.total += it.cantidad;
-      ca.asociadas.push({ nombre: a.nombre, codigo_asociado: codAsoc, cantidad: it.cantidad });
+      ca.asociadas.push({ nombre: a.nombre, codigo_asociado: codAsoc, numero, cantidad: it.cantidad });
       if (!ca.descripcion && it.descripcion) ca.descripcion = it.descripcion;
     }
-    por_asociada.push({ nombre: a.nombre, codigo_asociado: codAsoc, items, total_piezas });
+    por_asociada.push({ nombre: a.nombre, codigo_asociado: codAsoc, numero, items, total_piezas });
   }
   const por_codigo = [];
   for (const [code, ca] of codeAgg) por_codigo.push({ codigo: code, descripcion: ca.descripcion, total: ca.total, asociadas: ca.asociadas });
@@ -384,6 +436,109 @@ const store = {
   del(k){ delete mem[k]; try { localStorage.removeItem(k); } catch(e){} }
 };
 const K_PEDIDO='bw_pedido', K_PROG='bw_progreso', K_BC='bw_barcodes';
+
+/* ---------- Supabase: login + estado de suscripción ---------- */
+// Pega aquí la Publishable key de TU proyecto (empieza con sb_publishable_...).
+// Mientras diga PEGA_AQUI, la app funciona igual que antes, sin candado —
+// así no se rompe nada mientras terminas de configurar Supabase.
+const SUPABASE_URL = 'https://sxvsaubxaqfuxcjununy.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_BizeNCz9zNPbwcWt-8bCaQ_QqN7Shzs';
+const K_VERIFICADO = 'bw_verificado_hasta';
+const DIAS_GRACIA_OFFLINE = 4;   // días que puede seguir trabajando sin internet tras la última verificación
+
+let sb=null, currentUser=null;
+try{
+  if(window.supabase && SUPABASE_URL && !SUPABASE_KEY.startsWith('PEGA_AQUI')){
+    sb=supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+}catch(e){}
+
+function diasDesde(iso){ return (Date.now()-new Date(iso).getTime())/86400000; }
+
+async function verificarAcceso(){
+  if(!sb){ ocultarAuthGate(); arrancarAppLocal(); return; }   // Supabase aún sin configurar: no bloquear
+
+  const { data:{ session } } = await sb.auth.getSession();
+
+  if(!session){
+    const cache=store.get(K_VERIFICADO);
+    if(cache && diasDesde(cache)<=DIAS_GRACIA_OFFLINE){ ocultarAuthGate(); arrancarAppLocal(); return; }
+    mostrarAuthGate('login'); return;
+  }
+
+  currentUser=session.user;
+  try{
+    const { data:distri, error } = await sb.from('distribuidores').select('activo').eq('id', session.user.id).single();
+    if(error) throw error;
+    if(distri && distri.activo){
+      store.set(K_VERIFICADO, new Date().toISOString());
+      ocultarAuthGate(); arrancarAppLocal(); return;
+    }
+    mostrarPagoPendiente();
+  }catch(e){
+    const cache=store.get(K_VERIFICADO);
+    if(cache && diasDesde(cache)<=DIAS_GRACIA_OFFLINE){ ocultarAuthGate(); arrancarAppLocal(); return; }
+    mostrarAuthGate('login');
+  }
+}
+
+function mostrarAuthGate(modo){
+  document.getElementById('pago-pendiente').style.display='none';
+  document.getElementById('auth-tabs').style.display='flex';
+  document.getElementById('auth-form').style.display='flex';
+  setAuthMode(modo||'login');
+  document.getElementById('auth-gate').classList.remove('hidden');
+}
+function mostrarPagoPendiente(){
+  document.getElementById('auth-tabs').style.display='none';
+  document.getElementById('auth-form').style.display='none';
+  document.getElementById('auth-status').textContent='';
+  document.getElementById('pago-pendiente').style.display='flex';
+  document.getElementById('auth-gate').classList.remove('hidden');
+}
+function ocultarAuthGate(){
+  document.getElementById('auth-gate').classList.add('hidden');
+  document.getElementById('upload').classList.remove('hidden');
+}
+function setAuthMode(modo){
+  document.querySelectorAll('.auth-tab').forEach(b=>b.classList.toggle('active', b.dataset.mode===modo));
+  document.getElementById('auth-submit').textContent = modo==='signup' ? 'Crear cuenta' : 'Entrar';
+  document.getElementById('auth-form').dataset.mode = modo;
+  document.getElementById('auth-status').textContent='';
+}
+document.querySelectorAll('.auth-tab').forEach(b=>b.addEventListener('click', ()=>setAuthMode(b.dataset.mode)));
+
+document.getElementById('auth-form').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  if(!sb) return;
+  const email=document.getElementById('auth-email').value.trim();
+  const password=document.getElementById('auth-password').value;
+  const modo=document.getElementById('auth-form').dataset.mode || 'login';
+  const status=document.getElementById('auth-status');
+  status.className='up-status'; status.textContent='Un momento…';
+  try{
+    if(modo==='signup'){
+      const { error } = await sb.auth.signUp({ email, password });
+      if(error) throw error;
+      status.textContent='Cuenta creada. En cuanto se confirme tu pago, se activa tu acceso.';
+    } else {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+    }
+    await verificarAcceso();
+  }catch(err){
+    status.className='up-status err';
+    status.textContent='⚠️ '+(err.message||'No se pudo procesar.');
+  }
+});
+
+async function cerrarSesion(){
+  store.del(K_VERIFICADO);
+  if(sb){ try{ await sb.auth.signOut(); }catch(e){} }
+  location.reload();
+}
+document.getElementById('btn-logout-pending')?.addEventListener('click', cerrarSesion);
+document.getElementById('btn-logout-app')?.addEventListener('click', cerrarSesion);
 
 /* ---------- state ---------- */
 let DATA=null, codeMap=new Map(), totalPares=0;
@@ -494,7 +649,7 @@ function renderResultado(){
   const rows=e.asociadas.map(a=>{
     const done=!!progreso[keyFor(e.codigo,a.codigo_asociado)];
     return `<label class="row ${done?'done':''}"><input type="checkbox" ${done?'checked':''} onchange="toggle('${e.codigo}','${a.codigo_asociado}')">
-      <span class="row-name">${a.nombre}</span><span class="row-qty mono">x${a.cantidad}</span></label>`;
+      <span class="row-num mono">#${a.numero}</span><span class="row-name">${a.nombre}</span><span class="row-qty mono">x${a.cantidad}</span></label>`;
   }).join('');
   const all=e.asociadas.every(a=>progreso[keyFor(e.codigo,a.codigo_asociado)]);
   el.innerHTML=`<div class="card ${all?'all-done':''}">
@@ -507,17 +662,19 @@ function renderResultado(){
 /* ---------- render asociadas / resumen / progress ---------- */
 function renderAsociadas(){
   const el=document.getElementById('lista-asociadas');
+  // Orden SIEMPRE el del PDF (DATA.por_asociada nunca se reordena) — no se
+  // mueven de lugar aunque se vayan completando, para no perder la referencia.
   const list=DATA.por_asociada.map(a=>{
     const done=a.items.filter(it=>progreso[keyFor(it.codigo,a.codigo_asociado)]).length;
     return {a,done,total:a.items.length,ready:done===a.items.length};
-  }).sort((x,y)=>(x.ready-y.ready));
+  });
   el.innerHTML=list.map(({a,done,total,ready})=>{
     const items=a.items.map(it=>{
       const d=!!progreso[keyFor(it.codigo,a.codigo_asociado)];
       return `<label class="row ${d?'done':''}"><input type="checkbox" ${d?'checked':''} onchange="toggle('${it.codigo}','${a.codigo_asociado}')">
         <span class="row-codigo mono">${it.codigo}</span><span class="row-name">${it.descripcion||''}</span><span class="row-qty mono">x${it.cantidad}</span></label>`;
     }).join('');
-    return `<details class="asoc-card ${ready?'ready':''}"><summary><span>${a.nombre}</span>
+    return `<details class="asoc-card ${ready?'ready':''}"><summary><span><span class="asoc-num mono">#${a.numero}</span>${a.nombre}</span>
       <span class="asoc-progress mono">${ready?'✓ Listo':done+' / '+total}</span></summary>
       <div class="asoc-items">${items}</div></details>`;
   }).join('');
@@ -609,16 +766,20 @@ document.getElementById('modal-search').addEventListener('input', e=>buildPickLi
 
 /* ---------- camera + scanning ---------- */
 let stream=null, scanning=false, scanPaused=false, detector=null, zxingReader=null, rafId=null;
+let currentFacing='environment';  // 'environment' = trasera, 'user' = frontal (para dejar el celular en la mesa)
 const video=document.getElementById('video');
+const switchBtn=document.getElementById('btn-switch-cam');
 
 async function startCamera(){
   document.getElementById('cam-msg').textContent='Abriendo cámara…';
   try{
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:currentFacing}}, audio:false});
     video.srcObject=stream; await video.play();
+    video.classList.toggle('mirror', currentFacing==='user');
     document.getElementById('cam-off').style.display='none';
     document.getElementById('reticle').style.display='block';
     document.getElementById('laser').style.display='block';
+    switchBtn.style.display='flex';
     scanning=true; scanPaused=false;
     if('BarcodeDetector' in window){
       try{ detector=new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','upc_a','upc_e','itf','codabar','qr_code']}); }
@@ -629,12 +790,22 @@ async function startCamera(){
     }
   }catch(err){
     document.getElementById('cam-off').style.display='flex';
+    switchBtn.style.display='none';
     const m=document.getElementById('cam-msg');
     if(location.protocol==='file:') m.textContent='La cámara necesita que la app se abra desde una página web (https), no como archivo local. Mientras tanto, teclea el código abajo.';
     else if(err && (err.name==='NotAllowedError'||err.name==='SecurityError')) m.textContent='No diste permiso de cámara (o el sitio no es https). Actívalo en el candado del navegador, o teclea el código abajo.';
+    else if(err && err.name==='OverconstrainedError' && currentFacing==='user'){ currentFacing='environment'; m.textContent='Este celular no tiene cámara frontal utilizable, se usó la trasera.'; return startCamera(); }
     else m.textContent='No se pudo abrir la cámara en este dispositivo. Usa el cuadro de abajo para teclear el código.';
   }
 }
+async function switchCamera(){
+  const prev=currentFacing;
+  currentFacing = currentFacing==='environment' ? 'user' : 'environment';
+  stopCamera();
+  try{ await startCamera(); }
+  catch(e){ currentFacing=prev; await startCamera(); }
+}
+switchBtn.addEventListener('click', switchCamera);
 function loopNative(){
   if(!scanning) return;
   const tick=async ()=>{
@@ -667,6 +838,7 @@ function stopCamera(){
   document.getElementById('cam-off').style.display='flex';
   document.getElementById('reticle').style.display='none';
   document.getElementById('laser').style.display='none';
+  switchBtn.style.display='none';
   document.getElementById('cam-msg').textContent='Apunta al código de barras. Si la cámara no abre, teclea el código abajo.';
 }
 document.getElementById('btn-cam').addEventListener('click', startCamera);
@@ -690,9 +862,8 @@ document.querySelectorAll('.tab').forEach(btn=>{
 });
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden) stopCamera(); });
 
-/* ---------- boot ---------- */
-(function boot(){
-  // show "reanudar" note on upload if a previous pedido exists
+/* ---------- arranque de la app local (después de pasar el candado) ---------- */
+function arrancarAppLocal(){
   const saved=store.get(K_PEDIDO);
   if(saved){
     try{
@@ -703,7 +874,10 @@ document.addEventListener('visibilitychange', ()=>{ if(document.hidden) stopCame
       setTimeout(()=>{ const r=document.getElementById('resume'); if(r) r.addEventListener('click', e=>{ e.preventDefault(); loadData(d); }); },0);
     }catch(e){}
   }
-})();
+}
+
+/* ---------- boot: primero el candado de acceso ---------- */
+verificarAcceso();
 </script>
 </body>
 </html>
